@@ -33,5 +33,8 @@ process.stdin.on('end', () => {
       }
     }
   } catch (e) {}
-  process.stdout.write(d);
+  // 2026-07-03: stdout echo of the full hook input (incl. entire file contents)
+  // removed — it bloated session transcripts by ~5-6x (98.6MB in one session)
+  // while never reaching model context. Violations still warn via stderr above;
+  // clean passes are fully silent.
 });
