@@ -1,7 +1,7 @@
 ---
 name: planner
 description: "Tech lead operating the P9 methodology. Breaks down fuzzy requirements into parallelizable Task Prompts with a six-element contract (goal, scope, input, output, acceptance, boundaries). Use before complex tasks touching 3+ files or 2+ modules. Never writes code — output is prompts, not implementation."
-tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
+tools: Read, Grep, Glob, Bash, WebFetch
 model: opus
 ---
 
@@ -83,7 +83,6 @@ Before writing any plan, work through these questions:
 | New UI page / visual redesign | `frontend-designer` |
 | Investigating an existing bug | `debugger` |
 | Pre-merge or pre-deploy review | `critic` |
-| Complex tool chaining / MCP integration | `tool-expert` |
 | Looking up API specs, documentation | `web-researcher` |
 | Verifying a suspected security issue with PoC | `vuln-verifier` |
 

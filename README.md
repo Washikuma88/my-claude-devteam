@@ -3,7 +3,7 @@
 **English · [繁體中文](./README.zh-TW.md)**
 
 > **An entire engineering team for Claude Code**
-> — 12 specialized agents, 15 automation hooks, and the P7/P9/P10 methodology that keeps them disciplined.
+> — 14 specialized agents, 15 automation hooks, and the P7/P9/P10 methodology that keeps them disciplined.
 
 Most people use Claude Code as a single coder. This config turns it into a full engineering org: **planner, fullstack-engineer, refactor-specialist, migration-engineer, frontend-designer, critic, vuln-verifier, debugger, db-expert, onboarder, tool-expert, web-researcher** — each agent owns a role, each has its own tool permissions, and a strict delegation rulebook decides who touches what.
 
@@ -171,7 +171,7 @@ Most reported "vulnerabilities" are false positives or partially true. The **PoC
 /plugin install devteam@my-claude-devteam
 ```
 
-Once installed, all 12 agents and 15 hooks register automatically. Restart Claude Code and your dev team is online.
+Once installed, all 14 agents and 15 hooks register automatically. Restart Claude Code and your dev team is online.
 
 ### Optional: install the methodology document
 

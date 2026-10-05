@@ -1,6 +1,6 @@
 # The Team
 
-**English · [繁體中文](./README.zh-TW.md)**
+**English · [繁體中文](./agents-README.zh-TW.md)**
 
 Twelve specialized agents that replace "one Claude, many prompts" with "one request, a full engineering team".
 
@@ -9,26 +9,26 @@ Twelve specialized agents that replace "one Claude, many prompts" with "one requ
 ### Build & ship
 | Agent | Role | Model | Tools | Primary job |
 |-------|------|-------|-------|-------------|
-| [`planner`](./planner.md) | Tech Lead | opus | Read-only | Breaks fuzzy requirements into Task Prompts with a six-element contract. Never writes code. |
-| [`fullstack-engineer`](./fullstack-engineer.md) | Senior Engineer | sonnet | Read/Write | Ships features using the P7 methodology. Self-reviews before handoff. |
-| [`frontend-designer`](./frontend-designer.md) | Designer | sonnet | Read/Write | Builds memorable UI with a committed aesthetic direction. Rejects AI slop. |
-| [`refactor-specialist`](./refactor-specialist.md) | Refactor Lead | sonnet | Read/Write | Large-scale safe refactors. Atomic commits, full callsite verification. |
-| [`migration-engineer`](./migration-engineer.md) | Migration Lead | sonnet | Read/Write | Framework / library major-version upgrades. Incremental, verified, reversible. |
+| [`planner`](../agents/planner.md) | Tech Lead | opus | Read-only | Breaks fuzzy requirements into Task Prompts with a six-element contract. Never writes code. |
+| [`fullstack-engineer`](../agents/fullstack-engineer.md) | Senior Engineer | sonnet | Read/Write | Ships features using the P7 methodology. Self-reviews before handoff. |
+| [`frontend-designer`](../agents/frontend-designer.md) | Designer | sonnet | Read/Write | Builds memorable UI with a committed aesthetic direction. Rejects AI slop. |
+| [`refactor-specialist`](../agents/refactor-specialist.md) | Refactor Lead | sonnet | Read/Write | Large-scale safe refactors. Atomic commits, full callsite verification. |
+| [`migration-engineer`](../agents/migration-engineer.md) | Migration Lead | sonnet | Read/Write | Framework / library major-version upgrades. Incremental, verified, reversible. |
 
 ### Quality & safety
 | Agent | Role | Model | Tools | Primary job |
 |-------|------|-------|-------|-------------|
-| [`critic`](./critic.md) | Code Reviewer | opus | Read-only | Finds bugs, security holes, edge cases. Every finding with file:line + fix direction. |
-| [`vuln-verifier`](./vuln-verifier.md) | Pentester | opus | Read-only | Takes critic findings and writes real PoCs to confirm. No false positives. |
-| [`debugger`](./debugger.md) | Debug Engineer | opus | Read-only | Reads logs, builds hypotheses, verifies, fixes. Never guesses. |
-| [`db-expert`](./db-expert.md) | DB Specialist | opus | Read-only | Reviews schemas, migrations, queries for safety, indexes, race conditions. |
+| [`critic`](../agents/critic.md) | Code Reviewer | opus | Read-only | Finds bugs, security holes, edge cases. Every finding with file:line + fix direction. |
+| [`vuln-verifier`](../agents/vuln-verifier.md) | Pentester | opus | Read-only | Takes critic findings and writes real PoCs to confirm. No false positives. |
+| [`debugger`](../agents/debugger.md) | Debug Engineer | opus | Read-only | Reads logs, builds hypotheses, verifies, fixes. Never guesses. |
+| [`db-expert`](../agents/db-expert.md) | DB Specialist | opus | Read-only | Reviews schemas, migrations, queries for safety, indexes, race conditions. |
 
 ### Discovery & support
 | Agent | Role | Model | Tools | Primary job |
 |-------|------|-------|-------|-------------|
-| [`onboarder`](./onboarder.md) | Codebase Explorer | sonnet | Read-only | First-time codebase exploration. Builds a structured mental model in one report. |
-| [`tool-expert`](./tool-expert.md) | Platform Engineer | sonnet | All | Picks the right tool, chains workflows, troubleshoots tool failures. |
-| [`web-researcher`](./web-researcher.md) | Librarian | sonnet | WebSearch/WebFetch | Turns uncertainty into verified facts with sources. |
+| [`onboarder`](../agents/onboarder.md) | Codebase Explorer | sonnet | Read-only | First-time codebase exploration. Builds a structured mental model in one report. |
+| [`tool-expert`](../agents/tool-expert.md) | Platform Engineer | sonnet | All | Picks the right tool, chains workflows, troubleshoots tool failures. |
+| [`web-researcher`](../agents/web-researcher.md) | Librarian | sonnet | WebSearch/WebFetch | Turns uncertainty into verified facts with sources. |
 
 > **Note on tools**: agents have the minimum tools they need. Read-only agents (`planner`, `critic`, `vuln-verifier`, `debugger`, `db-expert`, `onboarder`) analyze and produce reports without modifying files. Execution agents (`fullstack-engineer`, `frontend-designer`, `refactor-specialist`, `migration-engineer`, `tool-expert`) have `Edit` / `Write`.
 
@@ -168,7 +168,7 @@ Create `agents/<your-agent>.md` with the frontmatter format used by the existing
 name: your-agent
 description: "One-line description with trigger words. This is what Claude uses to decide when to dispatch."
 tools: Read, Grep, Glob, Bash   # minimum necessary
-model: sonnet                    # opus for critical thinking, sonnet for execution
+model: fable
 ---
 
 You are the **Your Agent**...

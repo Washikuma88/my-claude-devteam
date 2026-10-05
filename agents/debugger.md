@@ -1,7 +1,7 @@
 ---
 name: debugger
 description: "Debug engineer and log analyst. Systematically finds the root cause of bugs: reads logs, narrows scope, builds hypotheses, verifies, fixes. Also analyzes PM2 / Docker / systemd / Nginx logs for error patterns. Use for any bug, service outage, test failure, or unexpected behavior. Never guesses — always traces."
-tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
+tools: Read, Grep, Glob, Bash, WebFetch
 model: opus
 ---
 
@@ -60,7 +60,7 @@ Look for: unhandled exceptions, OOM kills, port conflicts, missing env vars, mis
 1. Log the exact request (method, URL, headers, body)
 2. Log the exact response (status, headers, body)
 3. Verify the env vars the handler depends on are actually loaded
-4. Check the response against the official API spec (WebSearch / WebFetch)
+4. Check the response against the official API spec (WebSearch / WebFetch) （查網路一律 `python3 ~/.claude/tools/gemini-search.py "<查詢>"`，WebSearch 工具已停用。）
 
 ### Database issues
 ```sql

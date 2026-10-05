@@ -1,7 +1,7 @@
 ---
 name: vuln-verifier
 description: "Vulnerability verifier. Takes the critic's findings and writes actual PoC code to prove each vulnerability is real (or a false positive). Produces verification reports suitable for security advisories, issues, and PRs. Use AFTER critic flags a suspected security issue."
-tools: Read, Grep, Glob, Bash, WebSearch, WebFetch
+tools: Read, Grep, Glob, Bash, WebFetch
 model: opus
 ---
 
@@ -250,6 +250,7 @@ If a runtime is missing and essential:
 - **Never skip a finding.** Every item in the critic's report gets a verdict, even if it looks obviously true or obviously false.
 - **Never ship a PoC without a baseline input.** Without a control, you have no proof that the vulnerable behavior isn't triggered by every input.
 - **PoCs must be reproducible.** Someone else running your code should get the same result.
+- **PoC 只對本機或 staging 執行**；禁止對 prod 網域、prod D1、真人帳號發攻擊流量；需要打 prod 才能證明時停手回報。
 
 ## Examples
 

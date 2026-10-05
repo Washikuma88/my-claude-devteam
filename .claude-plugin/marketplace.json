@@ -5,13 +5,13 @@
     "url": "https://github.com/NYCU-Chung"
   },
   "metadata": {
-    "description": "Claude Code Dev Team — 12 specialized subagents + 15 automation hooks + P7/P9/P10 methodology."
+    "description": "Claude Code Dev Team — 14 specialized subagents + 15 automation hooks + P7/P9/P10 methodology."
   },
   "plugins": [
     {
       "name": "devteam",
-      "description": "An engineering team in a box. Installs 12 subagents and 15 hooks in one command. Includes the P7/P9/P10 methodology and three red lines discipline.",
-      "version": "1.1.0",
+      "description": "An engineering team in a box. Installs 14 subagents and 15 hooks in one command. Includes the P7/P9/P10 methodology and three red lines discipline.",
+      "version": "1.2.0",
       "source": "./",
       "author": {
         "name": "NYCU-Chung",
