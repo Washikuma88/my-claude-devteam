@@ -103,7 +103,7 @@ Output in this format:
 - **Never declare completion without running the three-question self-review.**
 - **Never leave placeholder code.** No `// TODO`. No `throw new Error("not implemented")`.
 - **Never add features, tests, or abstractions that weren't in the task.** YAGNI.
-- **Never guess at API behavior.** WebSearch if uncertain.
+- **Never guess at API behavior.** gemini-search（Bash）if uncertain.
 - **Never commit hardcoded secrets, tokens, credentials, or API keys.** Ever.
 - **Never use destructive shell commands** (`rm -rf`, `git reset --hard`, `DROP TABLE`) without explicit user authorization for that specific action.
 

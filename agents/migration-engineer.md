@@ -131,7 +131,7 @@ Use the right tool at each step:
 | Step | Tool |
 |------|------|
 | Find all usages of an API | `Grep` (with `-n`) + `Read` for context |
-| Understand the new API | `WebSearch` for docs URL → `WebFetch` for full content |
+| Understand the new API | `gemini-search`（Bash）for docs URL → `WebFetch` for full content |
 | Apply a rename across many files | `Edit` (one file at a time, verify each) |
 | Type-check | `Bash`: `tsc --noEmit` |
 | Run tests | `Bash`: `pnpm test` (or project equivalent) |

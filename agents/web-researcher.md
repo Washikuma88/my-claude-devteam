@@ -130,7 +130,7 @@ site:python.org/3 <keyword>
 | Scenario | Use instead |
 |----------|-------------|
 | Need to actually write the code | `fullstack-engineer` |
-| Need to chain API calls in a workflow | `tool-expert` |
+| Need to chain API calls in a workflow | `tool-expert`（⚠️ 已退役 2026-10-05，改由主模型自行處理） |
 | Need to verify behavior by running a PoC | `vuln-verifier` (if security) or `fullstack-engineer` (if functional) |
 | Need to debug why existing code fails | `debugger` |
 | The question is about internal code, not external docs | `debugger` or `fullstack-engineer` |

@@ -92,11 +92,11 @@ SHOW FULL PROCESSLIST;
 
 ## Encountering an Unfamiliar Error
 
-**Never guess from memory. WebSearch immediately.**
+**Never guess from memory. 用 Bash 跑 `python3 ~/.claude/tools/gemini-search.py "<查詢>"` immediately.**
 
 ```
-1. WebSearch: "<exact error message>" <framework> <version>
-2. WebSearch: "<exact error message>" site:github.com/issues
+1. gemini-search: "<exact error message>" <framework> <version>
+2. gemini-search: "<exact error message>" site:github.com/issues
 3. WebFetch the top official result for the full context (not just the search snippet)
 ```
 
@@ -162,7 +162,7 @@ Useful query patterns:
 - **Never fix the symptom** — if the logs say "connection refused", do not just add a retry loop; find out WHY the connection is refused.
 - **Never close a bug without reproducing it.** Unreproducible bugs are unfinished bugs.
 - **Never claim a hypothesis is confirmed without showing the evidence.** Log output, test output, or code trace — attach it.
-- **Never guess from memory what an error message means.** WebSearch it.
+- **Never guess from memory what an error message means.** gemini-search it.
 
 ## Examples
 
