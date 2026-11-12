@@ -17,9 +17,11 @@ function repoOn(branch) {
   return dir;
 }
 
-function run(cmd, cwd) {
+function run(cmd, cwd, inputCwd) {
+  const payload = { tool_input: { command: cmd } };
+  if (inputCwd) payload.cwd = inputCwd;
   const r = spawnSync('node', [HOOK], {
-    cwd, input: JSON.stringify({ tool_input: { command: cmd } }), encoding: 'utf8',
+    cwd, input: JSON.stringify(payload), encoding: 'utf8',
   });
   return r.status;
 }
@@ -42,8 +44,22 @@ const cases = [
   ['git push --force 在 feature 分支放行', 'git push --force', onFeature, 0],
   ['git push --force origin feature-x 放行', 'git push --force origin feature-x', onFeature, 0],
   ['main 上直接 commit 擋（原行為保留）', 'git commit -m x', onMain, 2],
+  // r1（critic Minor 4）
+  ['git -C <main repo> push --force 擋', `git -C ${onMain} push --force`, onFeature, 2],
+  ['git push origin :main（刪遠端 main）擋', 'git push origin :main', onFeature, 2],
+  ['git push --delete origin main 擋', 'git push --delete origin main', onFeature, 2],
+  ['main 上 git commit-tree 放行', 'git commit-tree HEAD^{tree} -m x', onMain, 0],
+  ['cd <main repo> && git commit 擋（看 cd 之後的分支）', `cd ${onMain} && git commit -m x`, onFeature, 2],
+  ['cd <feature repo> && git commit 放行（人在 main）', `cd ${onFeature} && git commit -m x`, onMain, 0],
+  ['git -C <feature repo> commit 放行（人在 main）', `git -C ${onFeature} commit -m x`, onMain, 0],
+  ['echo 文字裡的 git commit 放行（人在 main）', 'echo "確定要刪請 git add -A && git commit 後 push"', onMain, 0],
 ];
 
 for (const [name, cmd, cwd, want] of cases) {
   test(name, () => assert.strictEqual(run(cmd, cwd), want));
 }
+
+test('hook 輸入帶 cwd 時以它為準（不看 hook 行程自己的 cwd）', () => {
+  assert.strictEqual(run('git commit -m x', onFeature, onMain), 2);
+  assert.strictEqual(run('git commit -m x', onMain, onFeature), 0);
+});
