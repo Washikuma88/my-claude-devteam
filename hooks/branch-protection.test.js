@@ -17,11 +17,16 @@ function repoOn(branch) {
   return dir;
 }
 
-function run(cmd, cwd, inputCwd) {
+// 白名單檔：預設指向空檔，讓本機真實的 whitelist.txt 不影響結果
+const EMPTY_WL = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'bp-wl-')), 'whitelist.txt');
+fs.writeFileSync(EMPTY_WL, '');
+
+function run(cmd, cwd, inputCwd, whitelist = EMPTY_WL) {
   const payload = { tool_input: { command: cmd } };
   if (inputCwd) payload.cwd = inputCwd;
   const r = spawnSync('node', [HOOK], {
     cwd, input: JSON.stringify(payload), encoding: 'utf8',
+    env: { ...process.env, DEVTEAM_BP_WHITELIST: whitelist },
   });
   return r.status;
 }
@@ -62,4 +67,19 @@ for (const [name, cmd, cwd, want] of cases) {
 test('hook 輸入帶 cwd 時以它為準（不看 hook 行程自己的 cwd）', () => {
   assert.strictEqual(run('git commit -m x', onFeature, onMain), 2);
   assert.strictEqual(run('git commit -m x', onMain, onFeature), 0);
+});
+
+test('白名單 repo（只有 main 的個人設定 repo）：git -C／cd 之後 commit 放行', () => {
+  const wl = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'bp-wl-')), 'whitelist.txt');
+  fs.writeFileSync(wl, `# 測試\n${onMain}\n`);
+  assert.strictEqual(run(`git -C ${onMain} commit -m x`, onFeature, null, wl), 0);
+  assert.strictEqual(run(`cd ${onMain} && git commit -m x`, onFeature, null, wl), 0);
+  assert.strictEqual(run(`git -C ${onMain} commit -m x`, onFeature, null), 2);
+});
+
+test('白名單 repo：push --force 與刪遠端 main 仍擋', () => {
+  const wl = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'bp-wl-')), 'whitelist.txt');
+  fs.writeFileSync(wl, `${onMain}\n`);
+  assert.strictEqual(run(`git -C ${onMain} push --force`, onFeature, null, wl), 2);
+  assert.strictEqual(run(`cd ${onMain} && git push origin :main`, onFeature, null, wl), 2);
 });

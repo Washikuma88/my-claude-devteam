@@ -3,7 +3,8 @@
 // Behavior:
 //   - HARD BLOCK: force push to a protected branch (--force / -f / --force-with-lease / +ref),
 //                 deleting a protected branch on the remote (`git push origin :main`)
-//   - HARD BLOCK: git commit directly on a protected branch (git commit-tree is not a commit on the branch)
+//   - HARD BLOCK: git commit directly on a protected branch (git commit-tree is not a commit on the branch),
+//                 except in whitelisted personal config repos (~/.claude, ~/.claude/memory, whitelist.txt)
 //   - WARN: merge / rebase / reset / cherry-pick / revert / checkout on a protected branch
 // The command is split into shell segments (&& || ; | newline) and only segments that START with
 // `git` are judged, so text inside echo / heredoc and unrelated flags in other segments
@@ -21,6 +22,31 @@ function expand(p, base) {
   p = unquote(p);
   if (p === '~' || p.startsWith('~/')) p = path.join(os.homedir(), p.slice(1));
   return path.resolve(base, p);
+}
+
+// Commit whitelist: personal config repos that only have main (~/.claude and its memory/).
+// Commits there are allowed; force push / delete is still blocked. Extra repos: one path per line in
+// ~/.claude/tools/devteam-patches/whitelist.txt (or the file named by DEVTEAM_BP_WHITELIST). Matched by git toplevel.
+function realOr(p) { try { return require('fs').realpathSync(p); } catch (e) { return path.resolve(p); } }
+function loadWhitelist() {
+  const home = os.homedir();
+  const list = [path.join(home, '.claude'), path.join(home, '.claude', 'memory')];
+  const file = process.env.DEVTEAM_BP_WHITELIST || path.join(home, '.claude', 'tools', 'devteam-patches', 'whitelist.txt');
+  try {
+    for (const line of require('fs').readFileSync(file, 'utf8').split('\n')) {
+      const t = line.trim();
+      if (t && !t.startsWith('#')) list.push(expand(t, home));
+    }
+  } catch (e) {}
+  return new Set(list.map(realOr));
+}
+function isWhitelisted(dir) {
+  let top = '';
+  try {
+    const r = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: dir, encoding: 'utf8', timeout: 5000 });
+    top = (r.stdout || '').trim();
+  } catch (e) {}
+  return !!top && loadWhitelist().has(realOr(top));
 }
 
 const branchCache = new Map();
@@ -108,7 +134,7 @@ process.stdin.on('end', () => {
         process.exit(2);
       }
 
-      if (g.sub === 'commit' && PROTECTED.test(branch()) && !(g.args.includes('--amend') && g.args.includes('--no-edit'))) {
+      if (g.sub === 'commit' && PROTECTED.test(branch()) && !(g.args.includes('--amend') && g.args.includes('--no-edit')) && !isWhitelisted(g.dir)) {
         process.stderr.write(`[Hook] BLOCKED: You are on '${branch()}' (protected). Create a feature branch first:\n`);
         process.stderr.write(`        git checkout -b your-feature-name\n`);
         process.exit(2);
