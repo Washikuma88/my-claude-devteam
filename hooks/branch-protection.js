@@ -25,8 +25,25 @@ process.stdin.on('end', () => {
 
     const onProtected = PROTECTED.test(branch);
 
-    // Hard block: force push to protected branch (regardless of which branch we're on)
-    if (/git\s+push.*(--force|--force-with-lease|-f\b).*(main|master|production|release|prod)/.test(cmd)) {
+    // Hard block: force push to protected branch (regardless of which branch we're on).
+    // Judge each shell segment on its own, so `git push origin main && git worktree remove --force x`
+    // or `git push ... && rm -f prod.log` is not mistaken for a force push.
+    const segments = cmd.split(/&&|\|\||[;|\n]/);
+    const isForcePushToProtected = segments.some(seg => {
+      if (!/\bgit\s+push\b/.test(seg)) return false;
+      const args = seg.slice(seg.search(/\bgit\s+push\b/)).trim().split(/\s+/).slice(2);
+      const force = args.some(a => /^(--force|--force-with-lease|--force-if-includes)(=|$)/.test(a) || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a));
+      const refs = args.filter(a => !a.startsWith('-'));
+      const protectedRef = refs.slice(1).some(r => {
+        const plus = r.startsWith('+');
+        const dst = r.replace(/^\+/, '').split(':').pop().replace(/^refs\/heads\//, '');
+        return PROTECTED.test(dst) && (force || plus);
+      });
+      // No refspec given: `git push --force` pushes the current branch
+      const bareOnProtected = force && refs.length <= 1 && onProtected;
+      return protectedRef || bareOnProtected;
+    });
+    if (isForcePushToProtected) {
       process.stderr.write(`[Hook] BLOCKED: Force push to a protected branch is not allowed.\n`);
       process.exit(2);
     }
