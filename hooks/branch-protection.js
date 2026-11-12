@@ -82,15 +82,19 @@ function isForcePushToProtected(args, branch) {
   const force = args.some(a => /^(--force|--force-with-lease|--force-if-includes)(=|$)/.test(a) || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a));
   // Redirections (2>&1, >/dev/null, &>x, and the word after a bare > / >> / <) are not refs.
   const refs = [];
+  // --repo X / --repo=X names the remote, so every positional word is a refspec (refs start at 0, not 1)
+  let repoGiven = false;
   for (let k = 0; k < args.length; k++) {
     const a = args[k];
+    if (a === '--repo') { repoGiven = true; k++; continue; }
+    if (a.startsWith('--repo=')) { repoGiven = true; continue; }
     if (/^\d*[<>]+&?$/.test(a) || a === '&>' || a === '&>>') { k++; continue; }
     if (/[<>]/.test(a) || a.startsWith('-')) continue;
     refs.push(a);
   }
   // HEAD / @ as destination means the current branch
   const norm = (x) => (x === 'HEAD' || x === '@' ? branch() : x.replace(/^refs\/heads\//, ''));
-  const protectedRef = refs.slice(1).some(r => {
+  const protectedRef = refs.slice(repoGiven ? 0 : 1).some(r => {
     const plus = r.startsWith('+');
     const parts = r.replace(/^\+/, '').split(':');
     const dst = norm(parts.pop());
@@ -98,10 +102,10 @@ function isForcePushToProtected(args, branch) {
     return PROTECTED.test(dst) && (force || plus || isDelete);
   });
   if (args.includes('--delete') || args.includes('-d')) {
-    if (refs.slice(1).some(r => PROTECTED.test(norm(r)))) return true;
+    if (refs.slice(repoGiven ? 0 : 1).some(r => PROTECTED.test(norm(r)))) return true;
   }
   // No refspec given: `git push --force` pushes the current branch
-  const bareOnProtected = force && refs.length <= 1 && PROTECTED.test(branch());
+  const bareOnProtected = force && refs.length <= (repoGiven ? 0 : 1) && PROTECTED.test(branch());
   return protectedRef || bareOnProtected;
 }
 
@@ -167,7 +171,8 @@ process.stdin.on('end', () => {
     const branchAt = (x) => branchOf(x) || branchOf(base);
     const whitelistedAt = (x) => (branchOf(x) ? isWhitelisted(x) : isWhitelisted(base));
 
-    for (const raw of segmentsOf(cmd)) {
+    // backslash-newline continuations are one line to the shell (also inside heredocs without quotes)
+    for (const raw of segmentsOf(cmd.replace(/\\\r?\n/g, ' '))) {
       const seg = raw.trim().replace(/^[({]\s*/, '');
       const tokens = seg.split(/\s+/).filter(Boolean);
       // skip leading VAR=value assignments

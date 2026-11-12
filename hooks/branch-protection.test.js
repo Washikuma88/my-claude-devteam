@@ -148,3 +148,16 @@ const r4 = [
 for (const [name, cmd, cwd, want] of r4) {
   test(`r4 ${name}`, () => assert.strictEqual(run(cmd, cwd, cwd), want));
 }
+
+// r5（critic r4 複審小修）：--repo 時沒有 remote 位置參數；反斜線續行合成一行
+const r5 = [
+  ['git push --force --repo=origin main 擋', 'git push --force --repo=origin main', onFeature, 2],
+  ['git push --force --repo origin main 擋', 'git push --force --repo origin main', onFeature, 2],
+  ['git push --repo=origin feature-x --force 放行', 'git push --repo=origin feature-x --force', onFeature, 0],
+  ['反斜線續行 git push --force \\ origin main 擋', 'git push --force \\\n  origin main', onFeature, 2],
+  ['heredoc 內續行同句擋', 'cat <<EOF\ngit push --force \\\norigin main\nEOF', onFeature, 2],
+  ['續行但目標是 feature 放行', 'git push --force \\\n  origin feature-x', onFeature, 0],
+];
+for (const [name, cmd, cwd, want] of r5) {
+  test(`r5 ${name}`, () => assert.strictEqual(run(cmd, cwd, cwd), want));
+}
