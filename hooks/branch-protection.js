@@ -6,9 +6,10 @@
 //   - HARD BLOCK: git commit directly on a protected branch (git commit-tree is not a commit on the branch),
 //                 except in whitelisted personal config repos (~/.claude, ~/.claude/memory, whitelist.txt)
 //   - WARN: merge / rebase / reset / cherry-pick / revert / checkout on a protected branch
-// The command is split into shell segments (&& || ; | newline) and only segments that START with
-// `git` are judged, so text inside echo / heredoc and unrelated flags in other segments
-// (`git worktree remove --force`, `rm -f prod.log`) never trigger a block.
+// The command is split into shell segments (&& || ; | & newline, quote-aware). Segments starting with `git`
+// are parsed word by word, so unrelated flags in other segments (`git worktree remove --force`,
+// `rm -f prod.log`) and quoted text (echo "... git push ...") never trigger a block; any other segment that
+// still mentions git falls back to the old whole-segment regex (see WRAPPERS / hollow below).
 // The branch is looked up in the directory the segment actually runs in: `cd X && git ...`
 // and `git -C X ...` use X; otherwise the hook input's cwd.
 const { spawnSync } = require('child_process');
@@ -76,17 +77,28 @@ function parseGit(tokens, dir) {
 }
 
 function isForcePushToProtected(args, branch) {
+  // Quote characters anywhere in a token are dropped (main:refs/heads/"main" -> main:refs/heads/main).
+  args = args.map(a => a.replace(/["']/g, ''));
   const force = args.some(a => /^(--force|--force-with-lease|--force-if-includes)(=|$)/.test(a) || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a));
-  const refs = args.filter(a => !a.startsWith('-'));
+  // Redirections (2>&1, >/dev/null, &>x, and the word after a bare > / >> / <) are not refs.
+  const refs = [];
+  for (let k = 0; k < args.length; k++) {
+    const a = args[k];
+    if (/^\d*[<>]+&?$/.test(a) || a === '&>' || a === '&>>') { k++; continue; }
+    if (/[<>]/.test(a) || a.startsWith('-')) continue;
+    refs.push(a);
+  }
+  // HEAD / @ as destination means the current branch
+  const norm = (x) => (x === 'HEAD' || x === '@' ? branch() : x.replace(/^refs\/heads\//, ''));
   const protectedRef = refs.slice(1).some(r => {
     const plus = r.startsWith('+');
     const parts = r.replace(/^\+/, '').split(':');
-    const dst = parts.pop().replace(/^refs\/heads\//, '');
+    const dst = norm(parts.pop());
     const isDelete = parts.length === 1 && parts[0] === '';
     return PROTECTED.test(dst) && (force || plus || isDelete);
   });
   if (args.includes('--delete') || args.includes('-d')) {
-    if (refs.slice(1).some(r => PROTECTED.test(r.replace(/^refs\/heads\//, '')))) return true;
+    if (refs.slice(1).some(r => PROTECTED.test(norm(r)))) return true;
   }
   // No refspec given: `git push --force` pushes the current branch
   const bareOnProtected = force && refs.length <= 1 && PROTECTED.test(branch());
@@ -113,15 +125,24 @@ function segmentsOf(cmd) {
   return out;
 }
 
-// Segments we cannot parse reliably fall back to the old whole-segment regex (better a false block than a miss):
-// wrappers (eval, sh/bash/zsh -c, command, sudo, env, time, nohup, xargs, exec, nice), command substitution
-// ($( ... ) or backticks), or git called by a path other than the first word (sudo /usr/bin/git ...).
-const WRAPPERS = new Set(['eval', 'sh', 'bash', 'zsh', 'dash', 'command', 'sudo', 'env', 'time', 'nohup', 'xargs', 'exec', 'nice', 'builtin']);
-function needsLegacy(seg, tokens) {
-  if (/\$\(|`/.test(seg)) return true;
-  if (tokens.length && WRAPPERS.has(tokens[0])) return true;
-  return tokens.slice(1).some(t => /(^|\/)git["']?$/.test(t) && t.includes('/'));
+// Only segments whose first word is `git` (or a path ending in /git) or `cd` are parsed word by word.
+// Any other segment that still contains the word git after quoted text is hollowed out goes to the old
+// whole-segment regex (better a false block than a miss): if/then/else/do/until, `!`, timeout/stdbuf/caffeinate,
+// env/sudo/command ... prefixes. echo "... git push ..." hollows to echo "" and is not judged.
+// Wrappers that run a quoted string (eval, sh/bash/zsh -c ...) and command substitution ($( ) / backticks)
+// go to the old regex whenever the raw segment mentions git, since hollowing would hide it.
+const WRAPPERS = new Set(['eval', 'sh', 'bash', 'zsh', 'dash', 'ksh', 'fish', 'command', 'sudo', 'env', 'time', 'nohup', 'xargs', 'exec', 'nice', 'builtin', 'timeout', 'stdbuf', 'caffeinate', 'watch']);
+function hollow(seg) {
+  let out = ''; let q = '';
+  for (let k = 0; k < seg.length; k++) {
+    const c = seg[k];
+    if (q) { if (c === q && (q === "'" || seg[k - 1] !== '\\')) { q = ''; out += c; } continue; }
+    if (c === '"' || c === "'") { q = c; out += c; continue; }
+    out += c;
+  }
+  return out;
 }
+function firstWord(t) { return unquote(t || '').replace(/^\\/, ''); }
 const LEGACY_FORCE = /\bgit\b.*\bpush\b.*(--force|--force-with-lease|\s-[a-zA-Z]*f\b).*\b(main|master|production|release|prod)\b/;
 const LEGACY_DELETE = /\bgit\b.*\bpush\b.*(\s["']?[+:]["']?(refs\/heads\/)?(main|master|production|release|prod)\b|--delete\b.*\b(main|master|production|release|prod)\b)/;
 const LEGACY_BARE_FORCE = /\bgit\b.*\bpush\b.*(--force|--force-with-lease|\s-[a-zA-Z]*f\b)/;
@@ -153,21 +174,28 @@ process.stdin.on('end', () => {
       while (tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) tokens.shift();
       if (!tokens.length) continue;
 
-      if (needsLegacy(seg, tokens)) {
-        if (!/\bgit\b/.test(seg)) continue;
-        if (LEGACY_FORCE.test(seg) || LEGACY_DELETE.test(seg)) block(FORCE_MSG);
-        if (LEGACY_BARE_FORCE.test(seg) && PROTECTED.test(branchAt(dir))) block(FORCE_MSG);
-        if (LEGACY_COMMIT.test(seg) && PROTECTED.test(branchAt(dir)) && !whitelistedAt(dir)) block(commitMsg(branchAt(dir)));
-        continue;
-      }
+      const t0 = firstWord(tokens[0]);
+      const isGit = /(^|\/)git$/.test(t0);
+      const legacy = (text) => {
+        if (LEGACY_FORCE.test(text) || LEGACY_DELETE.test(text)) block(FORCE_MSG);
+        if (LEGACY_BARE_FORCE.test(text) && PROTECTED.test(branchAt(dir))) block(FORCE_MSG);
+        if (LEGACY_COMMIT.test(text) && PROTECTED.test(branchAt(dir)) && !whitelistedAt(dir)) block(commitMsg(branchAt(dir)));
+      };
 
-      if (tokens[0] === 'cd') {
+      if (t0 === 'cd') {
         const target = tokens[1] || '~';
         // $VAR / $(...) / backticks: cannot resolve, keep judging against the hook input's cwd
         dir = /[$`]/.test(target) ? base : expand(target, dir);
         continue;
       }
-      if (!/(^|\/)git$/.test(tokens[0])) continue;
+      if (!isGit) {
+        const subst = /\$\(|`/.test(seg);
+        if (/\bgit\b/.test(hollow(seg)) || ((subst || WRAPPERS.has(t0)) && /\bgit\b/.test(seg))) legacy(seg);
+        // $g push --force ...: the program name is a variable, judge as if it were git
+        else if (t0.startsWith('$')) legacy('git ' + seg);
+        continue;
+      }
+      if (/\$\(|`/.test(seg)) { legacy(seg); continue; }
 
       const g = parseGit(tokens, dir);
       const branch = () => branchAt(g.dir);

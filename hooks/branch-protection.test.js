@@ -113,3 +113,38 @@ const r3 = [
 for (const [name, cmd, cwd, want] of r3) {
   test(`r3 ${name}`, () => assert.strictEqual(run(cmd, cwd, cwd), want));
 }
+
+// r4（critic 複審 r3）：反向規則，段首不是 git／cd 但段裡（引號挖空後）還有 git → 整段 regex
+const r4 = [
+  ['if … then git push --force 擋', 'if true; then git push --force origin main; fi', onFeature, 2],
+  ['for … do git push --force 擋', 'for i in 1; do git push --force origin main; done', onFeature, 2],
+  ['until … do git push -f 擋', 'while false; do :; done; until true; do git push -f origin main; done', onFeature, 2],
+  ['else git push -f 擋', 'else git push -f origin main', onFeature, 2],
+  ['! git push --force 擋', '! git push --force origin main', onFeature, 2],
+  ['\\git push --force 擋', '\\git push --force origin main', onFeature, 2],
+  ['timeout 60 git 擋', 'timeout 60 git push --force origin main', onFeature, 2],
+  ['stdbuf 前綴擋', 'stdbuf -o0 git push --force origin main', onFeature, 2],
+  ['caffeinate 前綴擋', 'caffeinate git push --force origin main', onFeature, 2],
+  ['main:refs/heads/"main" 擋', 'git push --force origin main:refs/heads/"main"', onFeature, 2],
+  ["'git' 加引號當程式名 擋", "'git' push --force origin main", onFeature, 2],
+  ['$g 變數當程式名 擋', 'g=git; $g push --force origin main', onFeature, 2],
+  ['{ git push; } 群組擋', '{ git push --force origin main; }', onFeature, 2],
+  ['heredoc 內的 git push 行擋', 'cat <<EOF\ngit push --force origin main\nEOF', onFeature, 2],
+  // 無 ref／HEAD／@ 以目前分支判斷；重導向不當 ref
+  ['main 上 git push --force 2>&1 擋', 'git push --force 2>&1', onMain, 2],
+  ['main 上 git push --force origin 2>&1 擋', 'git push --force origin 2>&1', onMain, 2],
+  ['main 上 git push origin --force >/dev/null 擋', 'git push origin --force >/dev/null', onMain, 2],
+  ['main 上 git push --force &>/dev/null 擋', 'git push --force &>/dev/null', onMain, 2],
+  ['main 上 git push --force origin HEAD 擋', 'git push --force origin HEAD', onMain, 2],
+  ['main 上 git push -f origin @ 擋', 'git push -f origin @', onMain, 2],
+  ['main 上 timeout 60 git push --force 擋', 'timeout 60 git push --force', onMain, 2],
+  // 不誤擋
+  ['feature 上 git push --force origin HEAD 放行', 'git push --force origin HEAD', onFeature, 0],
+  ['git push origin feature-x 2>&1 | tail -1 放行', 'git push origin feature-x 2>&1 | tail -1', onFeature, 0],
+  ['echo "git push --force origin main 是禁止的" 放行', 'echo "git push --force origin main 是禁止的"', onFeature, 0],
+  ['ls 2>&1 & git status 放行', 'ls 2>&1 & git status', onMain, 0],
+  ['if 裡一般 git 放行', 'if git diff --quiet; then echo same; fi', onMain, 0],
+];
+for (const [name, cmd, cwd, want] of r4) {
+  test(`r4 ${name}`, () => assert.strictEqual(run(cmd, cwd, cwd), want));
+}
