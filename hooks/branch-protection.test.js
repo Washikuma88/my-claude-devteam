@@ -83,3 +83,33 @@ test('白名單 repo：push --force 與刪遠端 main 仍擋', () => {
   assert.strictEqual(run(`git -C ${onMain} push --force`, onFeature, null, wl), 2);
   assert.strictEqual(run(`cd ${onMain} && git push origin :main`, onFeature, null, wl), 2);
 });
+
+// r3（critic 複審 Major）：逐段判斷曾放過的寫法，舊版都擋；解析不了的段退回整段 regex
+const r3 = [
+  ['eval "git push --force origin main" 擋', 'eval "git push --force origin main"', onFeature, 2],
+  ['sh -c 擋', 'sh -c "git push --force origin main"', onFeature, 2],
+  ['bash -c 擋', "bash -c 'git push -f origin main'", onFeature, 2],
+  ['zsh -c 擋', 'zsh -c "git push --force origin main"', onFeature, 2],
+  ['/usr/bin/git push --force 擋', '/usr/bin/git push --force origin main', onFeature, 2],
+  ['command git 擋', 'command git push --force origin main', onFeature, 2],
+  ['sudo git 擋', 'sudo git push --force origin main', onFeature, 2],
+  ['env X=1 git 擋', 'env X=1 git push --force origin main', onFeature, 2],
+  ['time git 擋', 'time git push --force origin main', onFeature, 2],
+  ['nohup git 擋', 'nohup git push --force origin main', onFeature, 2],
+  ['xargs git 擋', 'echo x | xargs git push --force origin main', onFeature, 2],
+  ['單一 & 當分隔 擋', 'sleep 1 & git push --force origin main', onFeature, 2],
+  ['$( ) 子殼 擋', 'echo $(git push -f origin main)', onFeature, 2],
+  ['反引號子殼 擋', 'echo `git push -f origin main`', onFeature, 2],
+  ['git --git-dir .git push --force 擋', 'git --git-dir .git push --force origin main', onFeature, 2],
+  ['ref 雙引號 "main" 擋', 'git push --force origin "main"', onFeature, 2],
+  ["ref 單引號 'main' 擋", "git push --force origin 'main'", onFeature, 2],
+  ['sh -c "git commit" 在 main 上擋', 'sh -c "git commit -m x"', onMain, 2],
+  ['cd "$REPO" && git commit（解析不了，用 hook cwd 判）擋', 'cd "$REPO" && git commit -m x', onMain, 2],
+  ['cd $(…) && git commit（解析不了，用 hook cwd 判）擋', 'cd $(git rev-parse --show-toplevel) && git commit -m x', onMain, 2],
+  // 不誤擋
+  ['2>&1 的 & 不是分隔：push main 後 worktree remove --force 放行', 'git push origin main 2>&1 && git worktree remove --force /tmp/wt', onFeature, 0],
+  ['背景 & 後接一般 git 放行', 'sleep 1 & git status', onMain, 0],
+];
+for (const [name, cmd, cwd, want] of r3) {
+  test(`r3 ${name}`, () => assert.strictEqual(run(cmd, cwd, cwd), want));
+}

@@ -61,19 +61,21 @@ function branchOf(dir) {
   return b;
 }
 
-// Parse one git invocation: global options (-C dir, -c k=v, --git-dir=...) then subcommand and its args.
+
+// Parse one git invocation: global options (-C dir, -c k=v, --git-dir X, --work-tree X, --namespace X, --opt=val)
+// then subcommand and its args. Args are unquoted so "main" / 'main' compare as main.
 function parseGit(tokens, dir) {
   let k = 1;
   while (k < tokens.length && tokens[k].startsWith('-')) {
     const t = tokens[k];
     if (t === '-C') { dir = expand(tokens[k + 1] || '.', dir); k += 2; continue; }
-    if (t === '-c') { k += 2; continue; }
+    if (t === '-c' || t === '--git-dir' || t === '--work-tree' || t === '--namespace' || t === '--exec-path' || t === '--config-env') { k += 2; continue; }
     k += 1;
   }
-  return { dir, sub: tokens[k] || '', args: tokens.slice(k + 1) };
+  return { dir, sub: unquote(tokens[k] || ''), args: tokens.slice(k + 1).map(unquote) };
 }
 
-function isForcePushToProtected(args, dir) {
+function isForcePushToProtected(args, branch) {
   const force = args.some(a => /^(--force|--force-with-lease|--force-if-includes)(=|$)/.test(a) || /^-[a-zA-Z]*f[a-zA-Z]*$/.test(a));
   const refs = args.filter(a => !a.startsWith('-'));
   const protectedRef = refs.slice(1).some(r => {
@@ -87,18 +89,20 @@ function isForcePushToProtected(args, dir) {
     if (refs.slice(1).some(r => PROTECTED.test(r.replace(/^refs\/heads\//, '')))) return true;
   }
   // No refspec given: `git push --force` pushes the current branch
-  const bareOnProtected = force && refs.length <= 1 && PROTECTED.test(branchOf(dir));
+  const bareOnProtected = force && refs.length <= 1 && PROTECTED.test(branch());
   return protectedRef || bareOnProtected;
 }
 
-// Split on && || ; | newline, but not inside single / double quotes (echo "... && git commit ..." stays one segment).
+// Split on && || ; | & newline, but not inside single / double quotes (echo "... && git commit ..." stays one segment).
+// `&` that is part of a redirection (2>&1, &>file, >&2) is not a separator.
 function segmentsOf(cmd) {
   const out = []; let cur = ''; let q = '';
   for (let k = 0; k < cmd.length; k++) {
     const c = cmd[k];
     if (q) { if (c === q && (q === "'" || cmd[k - 1] !== '\\')) q = ''; cur += c; continue; }
     if (c === '"' || c === "'") { q = c; cur += c; continue; }
-    if (c === '\n' || c === ';' || c === '|' || (c === '&' && cmd[k + 1] === '&')) {
+    const redirAmp = c === '&' && cmd[k + 1] !== '&' && (cmd[k - 1] === '>' || cmd[k - 1] === '<' || cmd[k + 1] === '>');
+    if (c === '\n' || c === ';' || c === '|' || (c === '&' && !redirAmp)) {
       out.push(cur); cur = '';
       if ((c === '&' || c === '|') && cmd[k + 1] === c) k++;
       continue;
@@ -109,6 +113,24 @@ function segmentsOf(cmd) {
   return out;
 }
 
+// Segments we cannot parse reliably fall back to the old whole-segment regex (better a false block than a miss):
+// wrappers (eval, sh/bash/zsh -c, command, sudo, env, time, nohup, xargs, exec, nice), command substitution
+// ($( ... ) or backticks), or git called by a path other than the first word (sudo /usr/bin/git ...).
+const WRAPPERS = new Set(['eval', 'sh', 'bash', 'zsh', 'dash', 'command', 'sudo', 'env', 'time', 'nohup', 'xargs', 'exec', 'nice', 'builtin']);
+function needsLegacy(seg, tokens) {
+  if (/\$\(|`/.test(seg)) return true;
+  if (tokens.length && WRAPPERS.has(tokens[0])) return true;
+  return tokens.slice(1).some(t => /(^|\/)git["']?$/.test(t) && t.includes('/'));
+}
+const LEGACY_FORCE = /\bgit\b.*\bpush\b.*(--force|--force-with-lease|\s-[a-zA-Z]*f\b).*\b(main|master|production|release|prod)\b/;
+const LEGACY_DELETE = /\bgit\b.*\bpush\b.*(\s["']?[+:]["']?(refs\/heads\/)?(main|master|production|release|prod)\b|--delete\b.*\b(main|master|production|release|prod)\b)/;
+const LEGACY_BARE_FORCE = /\bgit\b.*\bpush\b.*(--force|--force-with-lease|\s-[a-zA-Z]*f\b)/;
+const LEGACY_COMMIT = /\bgit\b.*\bcommit(\s|$|["'`)])/;
+
+function block(msg) { process.stderr.write(msg); process.exit(2); }
+const FORCE_MSG = `[Hook] BLOCKED: Force push (or delete) of a protected branch is not allowed.\n`;
+function commitMsg(b) { return `[Hook] BLOCKED: You are on '${b}' (protected). Create a feature branch first:\n        git checkout -b your-feature-name\n`; }
+
 let d = '';
 process.stdin.on('data', c => d += c);
 process.stdin.on('end', () => {
@@ -117,27 +139,43 @@ process.stdin.on('end', () => {
     const cmd = String(i.tool_input?.command || '');
     if (!/\bgit\b/.test(cmd)) { process.stdout.write(d); return; }
 
-    let dir = i.cwd ? path.resolve(i.cwd) : process.cwd();
+    const base = i.cwd ? path.resolve(i.cwd) : process.cwd();
+    let dir = base;
+    // Branch of a directory; when the directory cannot be resolved (cd "$REPO", cd $(...), not a repo),
+    // fall back to the hook input's cwd instead of treating an empty branch as "not protected".
+    const branchAt = (x) => branchOf(x) || branchOf(base);
+    const whitelistedAt = (x) => (branchOf(x) ? isWhitelisted(x) : isWhitelisted(base));
+
     for (const raw of segmentsOf(cmd)) {
       const seg = raw.trim().replace(/^[({]\s*/, '');
       const tokens = seg.split(/\s+/).filter(Boolean);
       // skip leading VAR=value assignments
       while (tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) tokens.shift();
-      if (tokens[0] === 'cd') { dir = expand(tokens[1] || '~', dir); continue; }
-      if (tokens[0] !== 'git') continue;
+      if (!tokens.length) continue;
 
-      const g = parseGit(tokens, dir);
-      const branch = () => branchOf(g.dir);
-
-      if (g.sub === 'push' && isForcePushToProtected(g.args, g.dir)) {
-        process.stderr.write(`[Hook] BLOCKED: Force push (or delete) of a protected branch is not allowed.\n`);
-        process.exit(2);
+      if (needsLegacy(seg, tokens)) {
+        if (!/\bgit\b/.test(seg)) continue;
+        if (LEGACY_FORCE.test(seg) || LEGACY_DELETE.test(seg)) block(FORCE_MSG);
+        if (LEGACY_BARE_FORCE.test(seg) && PROTECTED.test(branchAt(dir))) block(FORCE_MSG);
+        if (LEGACY_COMMIT.test(seg) && PROTECTED.test(branchAt(dir)) && !whitelistedAt(dir)) block(commitMsg(branchAt(dir)));
+        continue;
       }
 
-      if (g.sub === 'commit' && PROTECTED.test(branch()) && !(g.args.includes('--amend') && g.args.includes('--no-edit')) && !isWhitelisted(g.dir)) {
-        process.stderr.write(`[Hook] BLOCKED: You are on '${branch()}' (protected). Create a feature branch first:\n`);
-        process.stderr.write(`        git checkout -b your-feature-name\n`);
-        process.exit(2);
+      if (tokens[0] === 'cd') {
+        const target = tokens[1] || '~';
+        // $VAR / $(...) / backticks: cannot resolve, keep judging against the hook input's cwd
+        dir = /[$`]/.test(target) ? base : expand(target, dir);
+        continue;
+      }
+      if (!/(^|\/)git$/.test(tokens[0])) continue;
+
+      const g = parseGit(tokens, dir);
+      const branch = () => branchAt(g.dir);
+
+      if (g.sub === 'push' && isForcePushToProtected(g.args, branch)) block(FORCE_MSG);
+
+      if (g.sub === 'commit' && PROTECTED.test(branch()) && !(g.args.includes('--amend') && g.args.includes('--no-edit')) && !whitelistedAt(g.dir)) {
+        block(commitMsg(branch()));
       }
 
       if (/^(merge|rebase|reset|cherry-pick|revert)$/.test(g.sub) || (g.sub === 'checkout' && g.args[0] && !g.args[0].startsWith('-'))) {
